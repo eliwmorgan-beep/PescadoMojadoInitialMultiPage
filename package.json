@@ -5,13 +5,11 @@
   "description": "",
   "keywords": [],
   "dependencies": {
+    "firebase": "12.8.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-scripts": "5.0.1",
-    "firebase": "12.8.0",
-    "react-router-dom": "^6.22.3",
-    "ajv": "8.12.0",
-    "ajv-keywords": "5.1.0"
+    "react-router-dom": "6.22.3",
+    "react-scripts": "5.0.1"
   },
   "devDependencies": {
     "@types/react": "18.2.43",
