@@ -2002,7 +2002,12 @@ export default function PuttingPage() {
             each round based on the previous round’s totals.
           </div>
 
-          {/* ✅ Footer */}
-<div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
-  {APP_VERSION} • Developed by Eli Morgan
-</div>
+                    {/* ✅ Footer */}
+          <div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
+            {APP_VERSION} • Developed by Eli Morgan
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
