@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header";
 import { db, ensureAnonAuth } from "../firebase";
-import { doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  deleteField,
+} from "firebase/firestore";
 
 const LEAGUE_ID = "default-league";
 const ADMIN_PASSWORD = "Pescado!";
@@ -110,7 +117,7 @@ export default function PuttingPage() {
     },
     players: [], // {id, name, pool: "A"|"B"|"C"}
     cardsByRound: {}, // { "1":[{id,name,playerIds}], "2":[...] }
-    scores: {}, // scores[round][station][playerId] = made(0..4)
+    scores: {}, // scores[round][station][playerId] = 0..4 (missing = field absent)
     submitted: {}, // submitted[round][cardId] = true
   });
 
@@ -173,28 +180,31 @@ export default function PuttingPage() {
     }
   }, [roundStarted]);
 
+  // Return null if missing/unrecorded; otherwise 0..4
   function madeFor(roundNum, stationNum, playerId) {
     const r = scores?.[String(roundNum)] || {};
     const st = r?.[String(stationNum)] || {};
-    const val = st?.[playerId];
-    // IMPORTANT: allow 0 and treat it as a valid recorded score
-    if (val === 0) return 0;
-    if (val === "0") return 0;
-    return typeof val === "number" ? val : Number(val ?? 0);
+    const raw = st?.[playerId];
+
+    if (raw === undefined || raw === null || raw === "") return null;
+
+    const n = Number(raw);
+    return Number.isNaN(n) ? null : n;
   }
 
+  // 0 is valid and counts as recorded; only undefined/null/"" is missing
   function rawMadeExists(roundNum, stationNum, playerId) {
     const r = scores?.[String(roundNum)] || {};
     const st = r?.[String(stationNum)] || {};
     const raw = st?.[playerId];
-    // IMPORTANT: 0 is a valid score and must count as "exists"
-    return raw !== undefined && raw !== null;
+    return !(raw === undefined || raw === null || raw === "");
   }
 
   function roundTotalForPlayer(roundNum, playerId) {
     let total = 0;
     for (let s = 1; s <= stations; s++) {
-      total += pointsForMade(madeFor(roundNum, s, playerId));
+      const made = madeFor(roundNum, s, playerId);
+      total += pointsForMade(made ?? 0);
     }
     return total;
   }
@@ -692,27 +702,33 @@ export default function PuttingPage() {
     }));
   }
 
+  // Blank = unrecorded; recorded 0 is valid
   async function setMade(roundNum, stationNum, playerId, made) {
     if (finalized) return;
 
-    // Prevent editing older rounds once you move forward
     if (roundNum !== currentRound) {
       alert("This round is locked because the league has moved on.");
       return;
     }
 
-    // Prevent editing after this card submitted this round
     const card = currentCards.find((c) => (c.playerIds || []).includes(playerId));
     if (card) {
       const alreadySubmitted = !!submitted?.[String(currentRound)]?.[card.id];
       if (alreadySubmitted) return;
     }
 
+    const path = `puttingLeague.scores.${String(roundNum)}.${String(
+      stationNum
+    )}.${playerId}`;
+
+    // Blank means "not recorded yet"
+    if (made === "" || made === null || made === undefined) {
+      await updateDoc(leagueRef, { [path]: deleteField() });
+      return;
+    }
+
     const val = clampMade(made);
-    await updatePuttingDot(
-      `scores.${String(roundNum)}.${String(stationNum)}.${playerId}`,
-      val
-    );
+    await updateDoc(leagueRef, { [path]: val });
   }
 
   function isCardFullyFilled(roundNum, card) {
@@ -721,7 +737,6 @@ export default function PuttingPage() {
 
     for (let s = 1; s <= stations; s++) {
       for (const pid of ids) {
-        // IMPORTANT: 0 counts as filled; only undefined/null is missing
         if (!rawMadeExists(roundNum, s, pid)) return false;
       }
     }
@@ -1104,7 +1119,9 @@ export default function PuttingPage() {
                             gap: 10,
                           }}
                         >
-                          <div style={{ fontWeight: 900, color: COLORS.text }}>{p.name}</div>
+                          <div style={{ fontWeight: 900, color: COLORS.text }}>
+                            {p.name}
+                          </div>
                           <div
                             style={{
                               fontSize: 12,
@@ -1112,7 +1129,11 @@ export default function PuttingPage() {
                               color: COLORS.navy,
                             }}
                           >
-                            {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
+                            {p.pool === "B"
+                              ? "B Pool"
+                              : p.pool === "C"
+                              ? "C Pool"
+                              : "A Pool"}
                           </div>
                         </div>
                       ))}
@@ -1452,13 +1473,13 @@ export default function PuttingPage() {
                           const open = !!openStations[stNum];
 
                           const stationRows = cardPlayers.map((p) => {
-                            const made = madeFor(currentRound, stNum, p.id);
+                            const made = madeFor(currentRound, stNum, p.id); // null or 0..4
                             return {
                               id: p.id,
                               name: p.name,
                               pool: p.pool,
-                              made,
-                              pts: pointsForMade(made),
+                              made, // null means blank
+                              pts: pointsForMade(made ?? 0),
                             };
                           });
 
@@ -1494,8 +1515,8 @@ export default function PuttingPage() {
                               {open && (
                                 <div style={{ padding: 12, background: "#fff" }}>
                                   <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 10 }}>
-                                    Enter <strong>made putts (0–4)</strong> for each player.
-                                    (4=5pts, 3=3pts, 2=2pts, 1=1pt, 0=0)
+                                    Choose <strong>made putts</strong> for each player. Blank means
+                                    “not entered yet.” (4=5pts, 3=3pts, 2=2pts, 1=1pt, 0=0)
                                   </div>
 
                                   <div style={{ display: "grid", gap: 8 }}>
@@ -1503,8 +1524,8 @@ export default function PuttingPage() {
                                       <div
                                         key={row.id}
                                         style={{
-                                          display: "flex",
-                                          justifyContent: "space-between",
+                                          display: "grid",
+                                          gridTemplateColumns: "1fr auto auto",
                                           alignItems: "center",
                                           gap: 10,
                                           padding: "10px 12px",
@@ -1512,10 +1533,19 @@ export default function PuttingPage() {
                                           border: `1px solid ${COLORS.border}`,
                                           background: COLORS.soft,
                                           opacity: alreadySubmitted ? 0.75 : 1,
+                                          minWidth: 0,
                                         }}
                                       >
-                                        <div style={{ flex: 1 }}>
-                                          <div style={{ fontWeight: 900, color: COLORS.text }}>
+                                        <div style={{ minWidth: 0 }}>
+                                          <div
+                                            style={{
+                                              fontWeight: 900,
+                                              color: COLORS.text,
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
                                             {row.name}{" "}
                                             <span style={{ fontSize: 12, opacity: 0.75 }}>
                                               (
@@ -1530,37 +1560,40 @@ export default function PuttingPage() {
                                         </div>
 
                                         <select
-                                          value={clampMade(row.made)}
+                                          value={row.made === null ? "" : String(row.made)}
                                           disabled={alreadySubmitted || finalized}
                                           onChange={(e) =>
                                             setMade(
                                               currentRound,
                                               stNum,
                                               row.id,
-                                              Number(e.target.value)
+                                              e.target.value === "" ? "" : Number(e.target.value)
                                             )
                                           }
                                           style={{
                                             ...inputStyle,
-                                            width: 90,
+                                            width: 84,
                                             background: "#fff",
                                             fontWeight: 900,
                                             textAlign: "center",
+                                            justifySelf: "end",
                                           }}
                                         >
+                                          <option value="">—</option>
                                           {[0, 1, 2, 3, 4].map((m) => (
                                             <option key={m} value={m}>
-                                              {m} made
+                                              {m}
                                             </option>
                                           ))}
                                         </select>
 
                                         <div
                                           style={{
-                                            width: 90,
                                             textAlign: "right",
                                             fontWeight: 900,
                                             color: COLORS.navy,
+                                            justifySelf: "end",
+                                            whiteSpace: "nowrap",
                                           }}
                                         >
                                           {row.pts} pts
@@ -1629,7 +1662,7 @@ export default function PuttingPage() {
                             color: alreadySubmitted ? "#444" : "white",
                             border: `1px solid ${alreadySubmitted ? "#ddd" : COLORS.green}`,
                           }}
-                          title="Only works when every station has a score for every player (0 is allowed)"
+                          title="Only works when every station has a score for every player (blank is missing; 0 is valid)"
                         >
                           {alreadySubmitted ? "Card Submitted (Locked)" : "Submit Card Scores"}
                         </button>
@@ -1657,7 +1690,7 @@ export default function PuttingPage() {
             </div>
           ) : null}
 
-                    {/* LEADERBOARDS (single toggle; all pools shown together) */}
+          {/* LEADERBOARDS (single toggle; all pools shown together) */}
           <div style={{ textAlign: "left" }}>
             <div
               onClick={() => setLeaderboardsOpen((v) => !v)}
