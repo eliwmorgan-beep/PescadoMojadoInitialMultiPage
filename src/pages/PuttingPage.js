@@ -12,6 +12,7 @@ import {
 
 const LEAGUE_ID = "default-league";
 const ADMIN_PASSWORD = "Pescado!";
+const APP_VERSION = "v1.0.0";
 
 function uid() {
   return Math.random().toString(36).substring(2, 10);
@@ -33,36 +34,70 @@ function clampMade(v) {
 }
 
 /**
- * Build "best" card group sizes:
- * - Prefer 4s
- * - Allow some 3s
- * - Avoid 2s whenever possible
+ * Compute card sizes using ONLY 2/3/4 (never 1).
+ * Preference:
+ *  - Never create 1s
+ *  - Avoid 2s when possible
+ *  - Keep sizes <= 4
  */
-function computeCardSizes(n) {
+function computeCardSizesNoOnes(n) {
   if (n <= 0) return [];
-  if (n <= 4) return [n]; // safe fallback
+  if (n === 1) return [1]; // should never happen in our flow (we require >=2 players)
+  if (n === 2) return [2];
+  if (n === 3) return [3];
+  if (n === 4) return [4];
 
-  const rem = n % 4;
+  const sizes = [2, 3, 4];
 
-  if (rem === 0) return Array.from({ length: n / 4 }, () => 4);
+  // DP where we pick the best combo for each sum:
+  // Score tuple: [num2, num4, length] and we MINIMIZE it.
+  // - fewer 2s first
+  // - then fewer 4s
+  // - then fewer total cards (shorter list)
+  const best = Array.from({ length: n + 1 }, () => null);
+  best[0] = { combo: [], score: [0, 0, 0] };
 
-  // rem 1 => convert one 4+1 into 3+3 (uses 6)
-  if (rem === 1) {
-    if (n === 5) return [3, 2]; // unavoidable edge case
-    const fours = (n - 6) / 4;
-    return [...Array.from({ length: fours }, () => 4), 3, 3];
+  function betterScore(a, b) {
+    // true if a is better (smaller lexicographically)
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] < b[i]) return true;
+      if (a[i] > b[i]) return false;
+    }
+    return false;
   }
 
-  // rem 2 => convert one 4+2 into 3+3 (uses 6)
-  if (rem === 2) {
-    if (n === 6) return [3, 3];
-    const fours = (n - 6) / 4;
-    return [...Array.from({ length: fours }, () => 4), 3, 3];
+  for (let sum = 0; sum <= n; sum++) {
+    if (!best[sum]) continue;
+    for (const s of sizes) {
+      const ns = sum + s;
+      if (ns > n) continue;
+
+      const prev = best[sum];
+      const nextCombo = [...prev.combo, s];
+
+      const num2 = prev.score[0] + (s === 2 ? 1 : 0);
+      const num4 = prev.score[1] + (s === 4 ? 1 : 0);
+      const len = prev.score[2] + 1;
+      const nextScore = [num2, num4, len];
+
+      if (!best[ns] || betterScore(nextScore, best[ns].score)) {
+        best[ns] = { combo: nextCombo, score: nextScore };
+      }
+    }
   }
 
-  // rem 3 => one 3 + rest 4
-  const fours = (n - 3) / 4;
-  return [...Array.from({ length: fours }, () => 4), 3];
+  const result = best[n]?.combo || [];
+  // Safety: ensure no 1s
+  if (result.some((x) => x === 1)) {
+    // fallback (should not happen)
+    return Array.from({ length: Math.floor(n / 3) }, () => 3).concat(
+      n % 3 === 2 ? [2] : n % 3 === 1 ? [4] : []
+    );
+  }
+
+  // Nice presentation: sort cards sizes so 4s first, then 3s, then 2s (optional)
+  // But we keep original order to preserve randomness chunking.
+  return result;
 }
 
 export default function PuttingPage() {
@@ -108,7 +143,7 @@ export default function PuttingPage() {
   // Putting league stored data
   const [putting, setPutting] = useState({
     settings: {
-      stations: 9,
+      stations: 1, // ✅ default now 1
       rounds: 1,
       locked: false,
       currentRound: 0, // 0 = not started, else 1..rounds
@@ -119,6 +154,7 @@ export default function PuttingPage() {
     cardsByRound: {}, // { "1":[{id,name,playerIds}], "2":[...] }
     scores: {}, // scores[round][station][playerId] = 0..4 (missing = field absent)
     submitted: {}, // submitted[round][cardId] = true
+    adjustments: {}, // ✅ leaderboard adjustments: { [playerId]: number }
   });
 
   // UI state
@@ -126,6 +162,9 @@ export default function PuttingPage() {
   const [checkinOpen, setCheckinOpen] = useState(true);
   const [cardsOpen, setCardsOpen] = useState(true);
   const [leaderboardsOpen, setLeaderboardsOpen] = useState(false);
+
+  // Admin adjustment editor UI
+  const [adjustOpen, setAdjustOpen] = useState(false);
 
   // Add player UI
   const [name, setName] = useState("");
@@ -141,7 +180,7 @@ export default function PuttingPage() {
 
   // -------- Helpers (computed) --------
   const settings = putting.settings || {};
-  const stations = Math.max(1, Math.min(10, Number(settings.stations || 9))); // 1–10
+  const stations = Math.max(1, Math.min(10, Number(settings.stations || 1))); // ✅ default 1
   const totalRounds = Math.max(1, Math.min(5, Number(settings.rounds || 1))); // 1–5
   const currentRound = Number(settings.currentRound || 0);
   const finalized = !!settings.finalized;
@@ -157,6 +196,10 @@ export default function PuttingPage() {
   const submitted =
     putting.submitted && typeof putting.submitted === "object"
       ? putting.submitted
+      : {};
+  const adjustments =
+    putting.adjustments && typeof putting.adjustments === "object"
+      ? putting.adjustments
       : {};
 
   const roundStarted = settings.locked && currentRound >= 1;
@@ -209,12 +252,18 @@ export default function PuttingPage() {
     return total;
   }
 
-  function cumulativeTotalForPlayer(playerId) {
+  function cumulativeBaseTotalForPlayer(playerId) {
     let total = 0;
     for (let r = 1; r <= totalRounds; r++) {
       total += roundTotalForPlayer(r, playerId);
     }
     return total;
+  }
+
+  function cumulativeTotalForPlayer(playerId) {
+    const base = cumulativeBaseTotalForPlayer(playerId);
+    const adj = Number(adjustments?.[playerId] ?? 0) || 0;
+    return base + adj;
   }
 
   function submittedCountForRound(roundNum) {
@@ -239,8 +288,8 @@ export default function PuttingPage() {
     return cards.filter((c) => !sub?.[c.id]);
   }
 
-  // Password ONLY for: begin round 1 and begin next round
-  function requireAdminForRoundStart(fn) {
+  // Admin password gate
+  function requireAdmin(fn) {
     const pw = window.prompt("Admin password:");
     if (pw !== ADMIN_PASSWORD) {
       alert("Wrong password.");
@@ -271,7 +320,7 @@ export default function PuttingPage() {
           },
           puttingLeague: {
             settings: {
-              stations: 9,
+              stations: 1, // ✅ default now 1
               rounds: 1,
               locked: false,
               currentRound: 0,
@@ -282,6 +331,7 @@ export default function PuttingPage() {
             cardsByRound: {},
             scores: {},
             submitted: {},
+            adjustments: {},
           },
         });
       }
@@ -290,7 +340,7 @@ export default function PuttingPage() {
         const data = s.data() || {};
         const pl = data.puttingLeague || {
           settings: {
-            stations: 9,
+            stations: 1,
             rounds: 1,
             locked: false,
             currentRound: 0,
@@ -301,18 +351,22 @@ export default function PuttingPage() {
           cardsByRound: {},
           scores: {},
           submitted: {},
+          adjustments: {},
         };
 
         const safe = {
           ...pl,
           settings: {
-            stations: 9,
+            stations: 1, // ✅ default now 1
             rounds: 1,
             locked: false,
             currentRound: 0,
             finalized: false,
             cardMode: "",
             ...(pl.settings || {}),
+          },
+          adjustments: {
+            ...(pl.adjustments || {}),
           },
         };
 
@@ -348,18 +402,17 @@ export default function PuttingPage() {
     const allIds = new Set(players.map((p) => p.id));
     const seen = new Set();
 
-    // size rule: prefer 3-4; allow 2 only if total players === 2
-    const allowTwo = players.length === 2;
-
     for (const c of cards) {
       const ids = Array.isArray(c.playerIds) ? c.playerIds : [];
+
       if (ids.length > 4)
         return { ok: false, reason: "A card has more than 4 players." };
-      if (ids.length < 3 && !(allowTwo && ids.length === 2)) {
+
+      // ✅ Now allow 2,3,4 (only disallow 1)
+      if (ids.length < 2) {
         return {
           ok: false,
-          reason:
-            "A card has fewer than 3 players (2 only allowed if there are exactly 2 total players).",
+          reason: "A card has only 1 player. Cards must have at least 2 players.",
         };
       }
 
@@ -393,7 +446,7 @@ export default function PuttingPage() {
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
 
-    const sizes = computeCardSizes(arr.length);
+    const sizes = computeCardSizesNoOnes(arr.length);
     const cards = [];
     let idx = 0;
 
@@ -419,7 +472,7 @@ export default function PuttingPage() {
       }))
       .sort((a, b) => b.total - a.total);
 
-    const sizes = computeCardSizes(ranked.length);
+    const sizes = computeCardSizesNoOnes(ranked.length);
     const cards = [];
     let idx = 0;
 
@@ -480,10 +533,13 @@ export default function PuttingPage() {
 
   async function randomizeRound1Cards() {
     if (finalized || roundStarted) return;
+
+    // ✅ require at least 2 players (since we refuse 1-player cards)
     if (players.length < 2) {
       alert("Check in at least 2 players first.");
       return;
     }
+
     const cards = buildRandomCardsRound1();
     await updatePutting({
       settings: { ...settings, cardMode: "random" },
@@ -514,12 +570,9 @@ export default function PuttingPage() {
 
     const count = selectedForCard.length;
 
-    // Prefer 3-4; allow 2 only if total players == 2
-    const allowTwo = players.length === 2;
-    const min = allowTwo ? 2 : 3;
-
-    if (count < min) {
-      alert(`Select at least ${min} players for a card.`);
+    // ✅ Now allow 2–4
+    if (count < 2) {
+      alert("Select at least 2 players for a card.");
       return;
     }
     if (count > 4) {
@@ -552,7 +605,7 @@ export default function PuttingPage() {
   async function beginRoundOne() {
     if (finalized) return;
 
-    await requireAdminForRoundStart(async () => {
+    await requireAdmin(async () => {
       if (players.length < 2) {
         alert("Check in at least 2 players first.");
         return;
@@ -591,7 +644,7 @@ export default function PuttingPage() {
   async function beginNextRound() {
     if (finalized) return;
 
-    await requireAdminForRoundStart(async () => {
+    await requireAdmin(async () => {
       if (!settings.locked || currentRound < 1) {
         alert("Round 1 has not begun yet.");
         return;
@@ -656,19 +709,20 @@ export default function PuttingPage() {
       settings: { ...settings, finalized: true },
     });
 
+    setAdjustOpen(false);
     alert("Scores finalized. Leaderboards are now locked.");
   }
 
   async function resetPuttingLeague() {
     const ok = window.confirm(
-      "Reset PUTTING league only?\n\nThis clears putting players, cards, scores, and settings.\n(Tag rounds will NOT be affected.)"
+      "Reset PUTTING league only?\n\nThis clears putting players, cards, scores, settings, and leaderboard adjustments.\n(Tag rounds will NOT be affected.)"
     );
     if (!ok) return;
 
     await updateDoc(leagueRef, {
       puttingLeague: {
         settings: {
-          stations: 9,
+          stations: 1, // ✅ default now 1
           rounds: 1,
           locked: false,
           currentRound: 0,
@@ -679,6 +733,7 @@ export default function PuttingPage() {
         cardsByRound: {},
         scores: {},
         submitted: {},
+        adjustments: {}, // ✅ clear adjustments
       },
     });
 
@@ -692,6 +747,41 @@ export default function PuttingPage() {
     setCheckinOpen(true);
     setCardsOpen(true);
     setLeaderboardsOpen(false);
+    setAdjustOpen(false);
+  }
+
+  // -------- Admin leaderboard adjustment tool --------
+  async function openAdjustmentsEditor() {
+    if (finalized) {
+      alert("Leaderboards are finalized. Adjustments are locked.");
+      return;
+    }
+    await requireAdmin(async () => {
+      setAdjustOpen((v) => !v);
+    });
+  }
+
+  async function setFinalLeaderboardTotal(playerId, desiredFinalTotal) {
+    if (finalized) return;
+
+    const base = cumulativeBaseTotalForPlayer(playerId);
+    const desired = Number(desiredFinalTotal);
+
+    if (Number.isNaN(desired)) return;
+
+    const adj = desired - base;
+
+    // Store adjustment as an integer (or keep as number)
+    await updatePuttingDot(`adjustments.${playerId}`, adj);
+  }
+
+  async function clearAdjustment(playerId) {
+    if (finalized) return;
+
+    await requireAdmin(async () => {
+      const path = `puttingLeague.adjustments.${playerId}`;
+      await updateDoc(leagueRef, { [path]: deleteField() });
+    });
   }
 
   // -------- Scorekeeper actions --------
@@ -763,8 +853,11 @@ export default function PuttingPage() {
     const pools = { A: [], B: [], C: [] };
 
     players.forEach((p) => {
-      const total = cumulativeTotalForPlayer(p.id);
-      const row = { id: p.id, name: p.name, pool: p.pool, total };
+      const base = cumulativeBaseTotalForPlayer(p.id);
+      const adj = Number(adjustments?.[p.id] ?? 0) || 0;
+      const total = base + adj;
+
+      const row = { id: p.id, name: p.name, pool: p.pool, total, adj };
       if (p.pool === "B") pools.B.push(row);
       else if (p.pool === "C") pools.C.push(row);
       else pools.A.push(row);
@@ -775,7 +868,7 @@ export default function PuttingPage() {
     });
 
     return pools;
-  }, [players, scores, stations, totalRounds]);
+  }, [players, scores, stations, totalRounds, adjustments]);
 
   // -------- UI gating --------
   const canBeginNextRound =
@@ -1015,6 +1108,107 @@ export default function PuttingPage() {
                     </button>
                   )}
 
+                  {/* ✅ Leaderboard Adjust Tool */}
+                  <button
+                    onClick={openAdjustmentsEditor}
+                    style={{
+                      ...smallButtonStyle,
+                      width: "100%",
+                      background: "#fff",
+                      border: `1px solid ${COLORS.navy}`,
+                      color: COLORS.navy,
+                    }}
+                    disabled={finalized || players.length === 0}
+                    title="Requires admin password. Adjust leaderboard totals before finalize."
+                  >
+                    {adjustOpen ? "Close Leaderboard Edit" : "Edit Leaderboard Scores"}
+                  </button>
+
+                  {adjustOpen && !finalized && (
+                    <div
+                      style={{
+                        border: `1px solid ${COLORS.border}`,
+                        borderRadius: 12,
+                        background: "#fff",
+                        padding: 10,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+                        Set a player’s <strong>final leaderboard total</strong>. This creates an
+                        adjustment (positive or negative). Disabled after Finalize.
+                      </div>
+
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {players.map((p) => {
+                          const base = cumulativeBaseTotalForPlayer(p.id);
+                          const adj = Number(adjustments?.[p.id] ?? 0) || 0;
+                          const total = base + adj;
+
+                          return (
+                            <div
+                              key={p.id}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr auto",
+                                gap: 10,
+                                alignItems: "center",
+                                padding: "10px 12px",
+                                borderRadius: 12,
+                                border: `1px solid ${COLORS.border}`,
+                                background: COLORS.soft,
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 900, color: COLORS.text }}>
+                                  {p.name}{" "}
+                                  <span style={{ fontSize: 12, opacity: 0.7 }}>
+                                    ({p.pool === "B" ? "B" : p.pool === "C" ? "C" : "A"} Pool)
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+                                  Base: <strong>{base}</strong> • Adj:{" "}
+                                  <strong style={{ color: adj ? COLORS.red : COLORS.navy }}>
+                                    {adj}
+                                  </strong>{" "}
+                                  • Current Final: <strong>{total}</strong>
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <input
+                                  type="number"
+                                  value={String(total)}
+                                  onChange={(e) =>
+                                    setFinalLeaderboardTotal(p.id, e.target.value)
+                                  }
+                                  style={{
+                                    ...inputStyle,
+                                    width: 96,
+                                    textAlign: "center",
+                                    background: "#fff",
+                                    fontWeight: 900,
+                                  }}
+                                />
+                                <button
+                                  onClick={() => clearAdjustment(p.id)}
+                                  style={{
+                                    ...smallButtonStyle,
+                                    background: "#fff",
+                                    border: `1px solid ${COLORS.border}`,
+                                    fontWeight: 900,
+                                  }}
+                                  title="Requires admin password"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={resetPuttingLeague}
                     style={{
@@ -1119,9 +1313,7 @@ export default function PuttingPage() {
                             gap: 10,
                           }}
                         >
-                          <div style={{ fontWeight: 900, color: COLORS.text }}>
-                            {p.name}
-                          </div>
+                          <div style={{ fontWeight: 900, color: COLORS.text }}>{p.name}</div>
                           <div
                             style={{
                               fontSize: 12,
@@ -1129,11 +1321,7 @@ export default function PuttingPage() {
                               color: COLORS.navy,
                             }}
                           >
-                            {p.pool === "B"
-                              ? "B Pool"
-                              : p.pool === "C"
-                              ? "C Pool"
-                              : "A Pool"}
+                            {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
                           </div>
                         </div>
                       ))}
@@ -1187,7 +1375,7 @@ export default function PuttingPage() {
                         </button>
 
                         <div style={{ fontSize: 12, opacity: 0.75 }}>
-                          Cards prefer 4s and then 3s (avoids 2s whenever possible).
+                          Cards are created using sizes 2–4 only (no 1-player cards).
                         </div>
 
                         <div style={{ fontSize: 12, opacity: 0.75 }}>
@@ -1242,7 +1430,7 @@ export default function PuttingPage() {
                 {!roundStarted && cardMode === "manual" ? (
                   <>
                     <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
-                      Create Round 1 cards (prefer 4; allow 3). Pools can be mixed.
+                      Create Round 1 cards (2–4 players). Pools can be mixed.
                     </div>
 
                     <div
@@ -1285,9 +1473,7 @@ export default function PuttingPage() {
 
                         <div style={{ fontSize: 12, opacity: 0.75 }}>
                           Selected: <strong>{selectedForCard.length}</strong> / 4
-                          <span style={{ marginLeft: 8 }}>
-                            (min {players.length === 2 ? 2 : 3})
-                          </span>
+                          <span style={{ marginLeft: 8 }}>(min 2)</span>
                         </div>
                       </div>
 
@@ -1788,6 +1974,11 @@ export default function PuttingPage() {
 
                                   <div style={{ fontWeight: 900, color: COLORS.text }}>
                                     {r.name}
+                                    {r.adj ? (
+                                      <span style={{ fontSize: 12, marginLeft: 8, opacity: 0.75 }}>
+                                        (adj {r.adj > 0 ? "+" : ""}{r.adj})
+                                      </span>
+                                    ) : null}
                                   </div>
                                 </div>
 
@@ -1809,6 +2000,11 @@ export default function PuttingPage() {
           <div style={{ marginTop: 18, fontSize: 12, opacity: 0.65, textAlign: "center" }}>
             Tip: Round 1 cards must be created before starting. After that, cards are auto-created
             each round based on the previous round’s totals.
+          </div>
+
+          {/* ✅ Footer */}
+          <div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
+            {APP_VERSION 1.5} • Developed by Eli Morgan
           </div>
         </div>
       </div>
