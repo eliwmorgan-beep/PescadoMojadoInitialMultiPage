@@ -7,13 +7,15 @@ export default function HomePage() {
     blueLight: "#e6f3ff",
     navy: "#1b1f5a",
     orange: "#f4a83a",
+    panel: "#ffffff",
+    border: "#dbe9ff",
   };
 
   const buttonStyle = {
     padding: "14px 18px",
     borderRadius: 14,
     border: `2px solid ${COLORS.navy}`,
-    fontWeight: 1000,
+    fontWeight: 900,
     cursor: "pointer",
     textDecoration: "none",
     display: "inline-flex",
@@ -37,11 +39,33 @@ export default function HomePage() {
       <div style={{ width: "100%", maxWidth: 760 }}>
         <Header />
 
-        <div style={{ marginTop: 14, textAlign: "center" }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 14 }}>
+        {/* Button panel */}
+        <div
+          style={{
+            marginTop: 18,
+            background: COLORS.panel,
+            borderRadius: 18,
+            padding: 22,
+            border: `2px solid ${COLORS.navy}`,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              display: "flex",
+              gap: 14,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <NavLink to="/tags" style={buttonStyle}>
               Tags
             </NavLink>
+
             <NavLink to="/putting" style={buttonStyle}>
               Putting
             </NavLink>
