@@ -1774,3 +1774,8 @@ export default function PuttingPage() {
   each round based on the previous round’s totals.
 </div>
 </div>
+        </div>
+      </div>
+    </div>
+  );
+}
