@@ -345,7 +345,11 @@ export default function PuttingPage() {
       const ids = Array.isArray(c.playerIds) ? c.playerIds : [];
       if (ids.length > 4) return { ok: false, reason: "A card has more than 4 players." };
       if (ids.length < 3 && !(allowTwo && ids.length === 2)) {
-        return { ok: false, reason: "A card has fewer than 3 players (2 only allowed if there are exactly 2 total players)." };
+        return {
+          ok: false,
+          reason:
+            "A card has fewer than 3 players (2 only allowed if there are exactly 2 total players).",
+        };
       }
 
       for (const pid of ids) {
@@ -424,9 +428,7 @@ export default function PuttingPage() {
     const n = (name || "").trim();
     if (!n) return;
 
-    const exists = players.some(
-      (p) => (p.name || "").trim().toLowerCase() === n.toLowerCase()
-    );
+    const exists = players.some((p) => (p.name || "").trim().toLowerCase() === n.toLowerCase());
     if (exists) {
       alert("That name is already checked in.");
       return;
@@ -441,9 +443,7 @@ export default function PuttingPage() {
 
   function toggleSelectForCard(playerId) {
     setSelectedForCard((prev) =>
-      prev.includes(playerId)
-        ? prev.filter((x) => x !== playerId)
-        : [...prev, playerId]
+      prev.includes(playerId) ? prev.filter((x) => x !== playerId) : [...prev, playerId]
     );
   }
 
@@ -563,7 +563,6 @@ export default function PuttingPage() {
         },
       });
 
-      // ✅ After start: hide check-in; minimize admin tools at top
       setSetupOpen(false);
       setCheckinOpen(false);
       setCardsOpen(true);
@@ -705,10 +704,7 @@ export default function PuttingPage() {
     }
 
     const val = clampMade(made);
-    await updatePuttingDot(
-      `scores.${String(roundNum)}.${String(stationNum)}.${playerId}`,
-      val
-    );
+    await updatePuttingDot(`scores.${String(roundNum)}.${String(stationNum)}.${playerId}`, val);
   }
 
   function isCardFullyFilled(roundNum, card) {
@@ -734,7 +730,6 @@ export default function PuttingPage() {
       return;
     }
 
-    // ✅ “Submit Card Scores” locks that card for the round (by submitted flag)
     await updatePuttingDot(`submitted.${String(currentRound)}.${cardId}`, true);
     alert("Card submitted (locked)!");
   }
@@ -771,16 +766,11 @@ export default function PuttingPage() {
     currentRound === totalRounds &&
     allCardsSubmittedForRound(currentRound);
 
-  const submitStats = roundStarted
-    ? submittedCountForRound(currentRound)
-    : { submitted: 0, total: 0 };
+  const submitStats = roundStarted ? submittedCountForRound(currentRound) : { submitted: 0, total: 0 };
 
-  const missingCardsThisRound = roundStarted
-    ? missingCardsForRound(currentRound)
-    : [];
+  const missingCardsThisRound = roundStarted ? missingCardsForRound(currentRound) : [];
 
-  const showCardModeButtons =
-    !roundStarted && !finalized && players.length >= 2;
+  const showCardModeButtons = !roundStarted && !finalized && players.length >= 2;
 
   // -------- Render --------
   return (
@@ -820,9 +810,7 @@ export default function PuttingPage() {
                 — Round {currentRound} of {totalRounds}
               </span>
             ) : (
-              <span style={{ opacity: 0.75, fontWeight: 800 }}>
-                — Not started
-              </span>
+              <span style={{ opacity: 0.75, fontWeight: 800 }}>— Not started</span>
             )}
             {finalized ? (
               <div style={{ marginTop: 6, color: COLORS.red, fontWeight: 900 }}>
@@ -856,7 +844,7 @@ export default function PuttingPage() {
             </div>
           )}
 
-          {/* ✅ ADMIN TOOLS (minimized at top after start) */}
+          {/* ✅ ADMIN TOOLS */}
           <div
             style={{
               border: `1px solid ${COLORS.border}`,
@@ -877,9 +865,7 @@ export default function PuttingPage() {
                 gap: 10,
               }}
             >
-              <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                Admin Tools
-              </div>
+              <div style={{ fontWeight: 900, color: COLORS.navy }}>Admin Tools</div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
                 {setupOpen ? "Tap to collapse" : "Tap to expand"}
               </div>
@@ -887,10 +873,16 @@ export default function PuttingPage() {
 
             {setupOpen && (
               <div style={{ marginTop: 10 }}>
-                {/* ✅ Stations (1–10) then Rounds (1–5) stacked */}
                 <div style={{ display: "grid", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy, marginBottom: 6 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        color: COLORS.navy,
+                        marginBottom: 6,
+                      }}
+                    >
                       Stations
                     </div>
                     <select
@@ -898,10 +890,7 @@ export default function PuttingPage() {
                       disabled={settings.locked || finalized}
                       onChange={(e) =>
                         updatePutting({
-                          settings: {
-                            ...settings,
-                            stations: Number(e.target.value),
-                          },
+                          settings: { ...settings, stations: Number(e.target.value) },
                         })
                       }
                       style={{ ...inputStyle, width: "100%", background: "#fff" }}
@@ -915,7 +904,14 @@ export default function PuttingPage() {
                   </div>
 
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy, marginBottom: 6 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        color: COLORS.navy,
+                        marginBottom: 6,
+                      }}
+                    >
                       Rounds
                     </div>
                     <select
@@ -923,10 +919,7 @@ export default function PuttingPage() {
                       disabled={settings.locked || finalized}
                       onChange={(e) =>
                         updatePutting({
-                          settings: {
-                            ...settings,
-                            rounds: Number(e.target.value),
-                          },
+                          settings: { ...settings, rounds: Number(e.target.value) },
                         })
                       }
                       style={{ ...inputStyle, width: "100%", background: "#fff" }}
@@ -955,9 +948,7 @@ export default function PuttingPage() {
                       Begin Round 1 (Lock Format)
                     </button>
                   ) : (
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>
-                      Format locked.
-                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>Format locked.</div>
                   )}
 
                   {canBeginNextRound && (
@@ -1040,14 +1031,7 @@ export default function PuttingPage() {
 
               {checkinOpen && (
                 <div style={{ marginTop: 10 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <input
                       placeholder="Player name"
                       value={name}
@@ -1095,15 +1079,9 @@ export default function PuttingPage() {
                             gap: 10,
                           }}
                         >
-                          <div style={{ fontWeight: 900, color: COLORS.text }}>
-                            {p.name}
-                          </div>
+                          <div style={{ fontWeight: 900, color: COLORS.text }}>{p.name}</div>
                           <div style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy }}>
-                            {p.pool === "B"
-                              ? "B Pool"
-                              : p.pool === "C"
-                              ? "C Pool"
-                              : "A Pool"}
+                            {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
                           </div>
                         </div>
                       ))}
@@ -1114,7 +1092,7 @@ export default function PuttingPage() {
                     </div>
                   )}
 
-                  {/* ✅ After check-in: choose manual vs random (BEFORE starting round) */}
+                  {/* ✅ After check-in: choose manual vs random */}
                   {showCardModeButtons && (
                     <div
                       style={{
@@ -1178,7 +1156,7 @@ export default function PuttingPage() {
             </div>
           )}
 
-          {/* ✅ CARDS (manual building is only available pre-start) */}
+          {/* ✅ CARDS */}
           <div
             style={{
               border: `1px solid ${COLORS.border}`,
@@ -1224,15 +1202,7 @@ export default function PuttingPage() {
                         marginBottom: 10,
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 10,
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                          marginBottom: 10,
-                        }}
-                      >
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
                         <input
                           placeholder="Card name (optional)"
                           value={cardName}
@@ -1255,18 +1225,14 @@ export default function PuttingPage() {
 
                         <div style={{ fontSize: 12, opacity: 0.75 }}>
                           Selected: <strong>{selectedForCard.length}</strong> / 4
-                          <span style={{ marginLeft: 8 }}>
-                            (min {players.length === 2 ? 2 : 3})
-                          </span>
+                          <span style={{ marginLeft: 8 }}>(min {players.length === 2 ? 2 : 3})</span>
                         </div>
                       </div>
 
                       <div style={{ display: "grid", gap: 8 }}>
                         {players.map((p) => {
                           const isSelected = selectedForCard.includes(p.id);
-                          const already = r1Cards.some((c) =>
-                            (c.playerIds || []).includes(p.id)
-                          );
+                          const already = r1Cards.some((c) => (c.playerIds || []).includes(p.id));
 
                           return (
                             <label
@@ -1294,11 +1260,7 @@ export default function PuttingPage() {
                                 <div style={{ fontWeight: 900 }}>{p.name}</div>
                               </div>
                               <div style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy }}>
-                                {p.pool === "B"
-                                  ? "B Pool"
-                                  : p.pool === "C"
-                                  ? "C Pool"
-                                  : "A Pool"}
+                                {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
                               </div>
                             </label>
                           );
@@ -1308,8 +1270,7 @@ export default function PuttingPage() {
                   </>
                 ) : roundStarted && currentRound >= 2 ? (
                   <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
-                    Cards for Round {currentRound} are auto-created based on Round{" "}
-                    {currentRound - 1} totals (highest grouped together).
+                    Cards for Round {currentRound} are auto-created based on Round {currentRound - 1} totals (highest grouped together).
                   </div>
                 ) : !roundStarted ? (
                   <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 10 }}>
@@ -1318,10 +1279,7 @@ export default function PuttingPage() {
                 ) : null}
 
                 <div style={{ display: "grid", gap: 8 }}>
-                  {(Array.isArray(cardsByRound[String(currentRound || 1)])
-                    ? cardsByRound[String(currentRound || 1)]
-                    : []
-                  ).map((c) => (
+                  {(Array.isArray(cardsByRound[String(currentRound || 1)]) ? cardsByRound[String(currentRound || 1)] : []).map((c) => (
                     <div
                       key={c.id}
                       style={{
@@ -1335,9 +1293,7 @@ export default function PuttingPage() {
                         {c.name}
                         {roundStarted && currentRound ? (
                           <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>
-                            {submitted?.[String(currentRound)]?.[c.id]
-                              ? "✓ submitted"
-                              : "not submitted"}
+                            {submitted?.[String(currentRound)]?.[c.id] ? "✓ submitted" : "not submitted"}
                           </span>
                         ) : null}
                       </div>
@@ -1346,17 +1302,10 @@ export default function PuttingPage() {
                           const p = playerById[pid];
                           if (!p) return null;
                           return (
-                            <div
-                              key={pid}
-                              style={{ display: "flex", justifyContent: "space-between" }}
-                            >
+                            <div key={pid} style={{ display: "flex", justifyContent: "space-between" }}>
                               <span style={{ fontWeight: 800 }}>{p.name}</span>
                               <span style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy }}>
-                                {p.pool === "B"
-                                  ? "B Pool"
-                                  : p.pool === "C"
-                                  ? "C Pool"
-                                  : "A Pool"}
+                                {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
                               </span>
                             </div>
                           );
@@ -1381,9 +1330,7 @@ export default function PuttingPage() {
                 marginBottom: 12,
               }}
             >
-              <div style={{ fontWeight: 900, color: COLORS.navy, marginBottom: 8 }}>
-                Scorekeeper
-              </div>
+              <div style={{ fontWeight: 900, color: COLORS.navy, marginBottom: 8 }}>Scorekeeper</div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <select
@@ -1420,10 +1367,7 @@ export default function PuttingPage() {
                   const card = currentCards.find((c) => c.id === activeCardId);
                   if (!card) return null;
 
-                  const cardPlayers = (card.playerIds || [])
-                    .map((pid) => playerById[pid])
-                    .filter(Boolean);
-
+                  const cardPlayers = (card.playerIds || []).map((pid) => playerById[pid]).filter(Boolean);
                   const alreadySubmitted = !!submitted?.[String(currentRound)]?.[card.id];
 
                   return (
@@ -1437,20 +1381,13 @@ export default function PuttingPage() {
                         )}
                       </div>
 
-                      {/* Stations accordion */}
                       <div style={{ display: "grid", gap: 10 }}>
                         {Array.from({ length: stations }, (_, i) => i + 1).map((stNum) => {
                           const open = !!openStations[stNum];
 
                           const stationRows = cardPlayers.map((p) => {
                             const made = madeFor(currentRound, stNum, p.id);
-                            return {
-                              id: p.id,
-                              name: p.name,
-                              pool: p.pool,
-                              made,
-                              pts: pointsForMade(made),
-                            };
+                            return { id: p.id, name: p.name, pool: p.pool, made, pts: pointsForMade(made) };
                           });
 
                           return (
@@ -1474,9 +1411,7 @@ export default function PuttingPage() {
                                   gap: 10,
                                 }}
                               >
-                                <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                                  Station {stNum}
-                                </div>
+                                <div style={{ fontWeight: 900, color: COLORS.navy }}>Station {stNum}</div>
                                 <div style={{ fontSize: 12, opacity: 0.75 }}>
                                   {open ? "Tap to collapse" : "Tap to expand"}
                                 </div>
@@ -1485,8 +1420,7 @@ export default function PuttingPage() {
                               {open && (
                                 <div style={{ padding: 12, background: "#fff" }}>
                                   <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 10 }}>
-                                    Enter <strong>made putts (0–4)</strong> for each player.
-                                    (4=5pts, 3=3pts, 2=2pts, 1=1pt, 0=0)
+                                    Enter <strong>made putts (0–4)</strong> for each player. (4=5pts, 3=3pts, 2=2pts, 1=1pt, 0=0)
                                   </div>
 
                                   <div style={{ display: "grid", gap: 8 }}>
@@ -1509,13 +1443,7 @@ export default function PuttingPage() {
                                           <div style={{ fontWeight: 900, color: COLORS.text }}>
                                             {row.name}{" "}
                                             <span style={{ fontSize: 12, opacity: 0.75 }}>
-                                              (
-                                              {row.pool === "B"
-                                                ? "B Pool"
-                                                : row.pool === "C"
-                                                ? "C Pool"
-                                                : "A Pool"}
-                                              )
+                                              ({row.pool === "B" ? "B Pool" : row.pool === "C" ? "C Pool" : "A Pool"})
                                             </span>
                                           </div>
                                         </div>
@@ -1523,14 +1451,7 @@ export default function PuttingPage() {
                                         <select
                                           value={clampMade(row.made)}
                                           disabled={alreadySubmitted || finalized}
-                                          onChange={(e) =>
-                                            setMade(
-                                              currentRound,
-                                              stNum,
-                                              row.id,
-                                              Number(e.target.value)
-                                            )
-                                          }
+                                          onChange={(e) => setMade(currentRound, stNum, row.id, Number(e.target.value))}
                                           style={{
                                             ...inputStyle,
                                             width: 90,
@@ -1546,14 +1467,7 @@ export default function PuttingPage() {
                                           ))}
                                         </select>
 
-                                        <div
-                                          style={{
-                                            width: 90,
-                                            textAlign: "right",
-                                            fontWeight: 900,
-                                            color: COLORS.navy,
-                                          }}
-                                        >
+                                        <div style={{ width: 90, textAlign: "right", fontWeight: 900, color: COLORS.navy }}>
                                           {row.pts} pts
                                         </div>
                                       </div>
@@ -1566,7 +1480,6 @@ export default function PuttingPage() {
                         })}
                       </div>
 
-                      {/* Round totals summary (for this card) */}
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontWeight: 900, color: COLORS.navy, marginBottom: 8 }}>
                           Round {currentRound} Totals (This Card)
@@ -1592,25 +1505,16 @@ export default function PuttingPage() {
                                 <div style={{ fontWeight: 900 }}>
                                   {p.name}{" "}
                                   <span style={{ fontSize: 12, opacity: 0.75 }}>
-                                    (
-                                    {p.pool === "B"
-                                      ? "B Pool"
-                                      : p.pool === "C"
-                                      ? "C Pool"
-                                      : "A Pool"}
-                                    )
+                                    ({p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"})
                                   </span>
                                 </div>
-                                <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                                  {total} pts
-                                </div>
+                                <div style={{ fontWeight: 900, color: COLORS.navy }}>{total} pts</div>
                               </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      {/* ✅ Submit locks this card for this round and admin sees missing */}
                       <div style={{ marginTop: 14 }}>
                         <button
                           onClick={() => submitCardScores(card.id)}
@@ -1627,7 +1531,7 @@ export default function PuttingPage() {
                           {alreadySubmitted ? "Card Submitted (Locked)" : "Submit Card Scores"}
                         </button>
 
-                        <div style={{ marginTop: 8,                        <div
+                        <div
                           style={{
                             marginTop: 8,
                             fontSize: 12,
@@ -1635,8 +1539,7 @@ export default function PuttingPage() {
                             textAlign: "center",
                           }}
                         >
-                          Submitting locks this card for this round and is required before the
-                          admin can begin the next round or finalize.
+                          Submitting locks this card for this round and is required before the admin can begin the next round or finalize.
                         </div>
                       </div>
                     </div>
@@ -1673,9 +1576,7 @@ export default function PuttingPage() {
                   }}
                 >
                   <div
-                    onClick={() =>
-                      setPoolBoardsOpen((prev) => ({ ...prev, [k]: !prev[k] }))
-                    }
+                    onClick={() => setPoolBoardsOpen((prev) => ({ ...prev, [k]: !prev[k] }))}
                     style={{
                       padding: "12px 12px",
                       cursor: "pointer",
@@ -1700,9 +1601,7 @@ export default function PuttingPage() {
                   {open && (
                     <div style={{ padding: 12 }}>
                       {rows.length === 0 ? (
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>
-                          No players in this pool yet.
-                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>No players in this pool yet.</div>
                       ) : (
                         <div style={{ display: "grid", gap: 8 }}>
                           {rows.map((r, idx) => (
@@ -1719,31 +1618,14 @@ export default function PuttingPage() {
                                 gap: 10,
                               }}
                             >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 10,
-                                  alignItems: "center",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: 34,
-                                    textAlign: "center",
-                                    fontWeight: 900,
-                                    color: COLORS.navy,
-                                  }}
-                                >
+                              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <div style={{ width: 34, textAlign: "center", fontWeight: 900, color: COLORS.navy }}>
                                   {idx + 1}
                                 </div>
-                                <div style={{ fontWeight: 900, color: COLORS.text }}>
-                                  {r.name}
-                                </div>
+                                <div style={{ fontWeight: 900, color: COLORS.text }}>{r.name}</div>
                               </div>
 
-                              <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                                {r.total} pts
-                              </div>
+                              <div style={{ fontWeight: 900, color: COLORS.navy }}>{r.total} pts</div>
                             </div>
                           ))}
                         </div>
@@ -1756,14 +1638,7 @@ export default function PuttingPage() {
           </div>
 
           {/* Footer */}
-          <div
-            style={{
-              marginTop: 14,
-              textAlign: "center",
-              fontSize: 12,
-              color: "#666",
-            }}
-          >
+          <div style={{ marginTop: 14, textAlign: "center", fontSize: 12, color: "#666" }}>
             Putting League • Version 1.3 • Developed by Eli Morgan
           </div>
         </div>
