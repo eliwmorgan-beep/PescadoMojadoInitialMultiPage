@@ -165,7 +165,7 @@ export default function PuttingPage() {
     return map;
   }, [players]);
 
-  // After league starts, collapse check-in and collapse admin tools by default
+  // After league starts, collapse check-in and admin tools by default
   useEffect(() => {
     if (roundStarted) {
       setCheckinOpen(false);
@@ -177,21 +177,18 @@ export default function PuttingPage() {
     const r = scores?.[String(roundNum)] || {};
     const st = r?.[String(stationNum)] || {};
     const val = st?.[playerId];
-    return typeof val === "number" ? val : Number(val ?? 0) || 0;
+    // IMPORTANT: allow 0 and treat it as a valid recorded score
+    if (val === 0) return 0;
+    if (val === "0") return 0;
+    return typeof val === "number" ? val : Number(val ?? 0);
   }
 
-  /**
-   * IMPORTANT FIX:
-   * Treat "0" as a valid recorded score.
-   * Missing means the key is not present (or null/empty string).
-   */
   function rawMadeExists(roundNum, stationNum, playerId) {
     const r = scores?.[String(roundNum)] || {};
     const st = r?.[String(stationNum)] || {};
-    const hasKey = Object.prototype.hasOwnProperty.call(st, playerId);
-    if (!hasKey) return false;
-    const raw = st[playerId];
-    return raw !== null && raw !== "";
+    const raw = st?.[playerId];
+    // IMPORTANT: 0 is a valid score and must count as "exists"
+    return raw !== undefined && raw !== null;
   }
 
   function roundTotalForPlayer(roundNum, playerId) {
@@ -232,14 +229,14 @@ export default function PuttingPage() {
     return cards.filter((c) => !sub?.[c.id]);
   }
 
-  // Password gating ONLY for beginning rounds (Round 1 + Begin Next Round)
-  function requireAdminPasswordOrReturnFalse() {
+  // Password ONLY for: begin round 1 and begin next round
+  function requireAdminForRoundStart(fn) {
     const pw = window.prompt("Admin password:");
     if (pw !== ADMIN_PASSWORD) {
       alert("Wrong password.");
-      return false;
+      return;
     }
-    return true;
+    return fn();
   }
 
   // -------- Firestore subscribe + bootstrap --------
@@ -341,7 +338,7 @@ export default function PuttingPage() {
     const allIds = new Set(players.map((p) => p.id));
     const seen = new Set();
 
-    // size rule: prefer 3-4; allow 2 only if total players === 2 (rare)
+    // size rule: prefer 3-4; allow 2 only if total players === 2
     const allowTwo = players.length === 2;
 
     for (const c of cards) {
@@ -360,7 +357,10 @@ export default function PuttingPage() {
         if (!allIds.has(pid))
           return { ok: false, reason: "A card contains an unknown player." };
         if (seen.has(pid))
-          return { ok: false, reason: "A player appears on more than one card." };
+          return {
+            ok: false,
+            reason: "A player appears on more than one card.",
+          };
         seen.add(pid);
       }
     }
@@ -425,7 +425,8 @@ export default function PuttingPage() {
 
     return cards;
   }
-    // --------- Admin actions: check-in / cards / rounds ---------
+
+  // --------- Admin actions: check-in / cards / rounds ---------
   async function addPlayer() {
     if (finalized) {
       alert("Scores are finalized. Reset to start a new league.");
@@ -459,7 +460,6 @@ export default function PuttingPage() {
     );
   }
 
-  // NO PASSWORD
   async function setCardModeManual() {
     if (finalized || roundStarted) return;
     await updatePutting({
@@ -468,7 +468,6 @@ export default function PuttingPage() {
     setCardsOpen(true);
   }
 
-  // NO PASSWORD
   async function randomizeRound1Cards() {
     if (finalized || roundStarted) return;
     if (players.length < 2) {
@@ -492,7 +491,6 @@ export default function PuttingPage() {
     setCardsOpen(true);
   }
 
-  // NO PASSWORD
   async function createCard() {
     if (finalized) return;
     if (roundStarted) {
@@ -506,7 +504,7 @@ export default function PuttingPage() {
 
     const count = selectedForCard.length;
 
-    // Prefer 3-4; allow 2 only if total players == 2 (edge case)
+    // Prefer 3-4; allow 2 only if total players == 2
     const allowTwo = players.length === 2;
     const min = allowTwo ? 2 : 3;
 
@@ -541,93 +539,89 @@ export default function PuttingPage() {
     setCardName("");
   }
 
-  // PASSWORD REQUIRED (Begin Round 1)
   async function beginRoundOne() {
     if (finalized) return;
 
-    if (!requireAdminPasswordOrReturnFalse()) return;
+    await requireAdminForRoundStart(async () => {
+      if (players.length < 2) {
+        alert("Check in at least 2 players first.");
+        return;
+      }
 
-    if (players.length < 2) {
-      alert("Check in at least 2 players first.");
-      return;
-    }
+      const check = validateRound1Cards(r1Cards);
+      if (!check.ok) {
+        alert(
+          `Round 1 can't begin yet.\n\n${check.reason}\n\nTip: Choose "Manually Create Cards" or "Randomize Cards" and make sure everyone is assigned.`
+        );
+        return;
+      }
 
-    // Require round 1 cards to exist and include every player exactly once
-    const check = validateRound1Cards(r1Cards);
-    if (!check.ok) {
-      alert(
-        `Round 1 can't begin yet.\n\n${check.reason}\n\nTip: Choose "Manually Create Cards" or "Randomize Cards" and make sure everyone is assigned.`
-      );
-      return;
-    }
+      await updatePutting({
+        settings: {
+          ...settings,
+          stations,
+          rounds: totalRounds,
+          locked: true,
+          currentRound: 1,
+          finalized: false,
+        },
+        submitted: {
+          ...(putting.submitted || {}),
+          "1": putting.submitted?.["1"] || {},
+        },
+      });
 
-    await updatePutting({
-      settings: {
-        ...settings,
-        stations,
-        rounds: totalRounds,
-        locked: true,
-        currentRound: 1,
-        finalized: false,
-      },
-      submitted: {
-        ...(putting.submitted || {}),
-        "1": putting.submitted?.["1"] || {},
-      },
+      setSetupOpen(false);
+      setCheckinOpen(false);
+      setCardsOpen(true);
+      window.scrollTo(0, 0);
     });
-
-    setSetupOpen(false);
-    setCheckinOpen(false);
-    setCardsOpen(true);
-    window.scrollTo(0, 0);
   }
 
-  // PASSWORD REQUIRED (Begin Next Round)
   async function beginNextRound() {
     if (finalized) return;
 
-    if (!requireAdminPasswordOrReturnFalse()) return;
+    await requireAdminForRoundStart(async () => {
+      if (!settings.locked || currentRound < 1) {
+        alert("Round 1 has not begun yet.");
+        return;
+      }
+      if (currentRound >= totalRounds) {
+        alert("You are already on the final round.");
+        return;
+      }
+      if (!allCardsSubmittedForRound(currentRound)) {
+        const missing = missingCardsForRound(currentRound);
+        const names = missing.map((c) => c.name).join(", ");
+        alert(
+          `Not all cards have submitted scores for Round ${currentRound} yet.\n\nWaiting on: ${
+            names || "Unknown"
+          }`
+        );
+        return;
+      }
 
-    if (!settings.locked || currentRound < 1) {
-      alert("Round 1 has not begun yet.");
-      return;
-    }
-    if (currentRound >= totalRounds) {
-      alert("You are already on the final round.");
-      return;
-    }
-    if (!allCardsSubmittedForRound(currentRound)) {
-      const missing = missingCardsForRound(currentRound);
-      const names = missing.map((c) => c.name).join(", ");
-      alert(
-        `Not all cards have submitted scores for Round ${currentRound} yet.\n\nWaiting on: ${
-          names || "Unknown"
-        }`
-      );
-      return;
-    }
+      const nextRound = currentRound + 1;
+      const autoCards = buildAutoCardsFromRound(currentRound);
 
-    const nextRound = currentRound + 1;
-    const autoCards = buildAutoCardsFromRound(currentRound);
+      await updatePutting({
+        settings: { ...settings, currentRound: nextRound },
+        cardsByRound: {
+          ...(putting.cardsByRound || {}),
+          [String(nextRound)]: autoCards,
+        },
+        submitted: {
+          ...(putting.submitted || {}),
+          [String(nextRound)]: {},
+        },
+      });
 
-    await updatePutting({
-      settings: { ...settings, currentRound: nextRound },
-      cardsByRound: {
-        ...(putting.cardsByRound || {}),
-        [String(nextRound)]: autoCards,
-      },
-      submitted: {
-        ...(putting.submitted || {}),
-        [String(nextRound)]: {},
-      },
+      setActiveCardId("");
+      setOpenStations({});
+      window.scrollTo(0, 0);
     });
-
-    setActiveCardId("");
-    setOpenStations({});
-    window.scrollTo(0, 0);
   }
 
-  // NO PASSWORD
   async function finalizeScores() {
     if (!settings.locked || currentRound < 1) {
       alert("League hasn't started yet.");
@@ -655,7 +649,6 @@ export default function PuttingPage() {
     alert("Scores finalized. Leaderboards are now locked.");
   }
 
-  // NO PASSWORD
   async function resetPuttingLeague() {
     const ok = window.confirm(
       "Reset PUTTING league only?\n\nThis clears putting players, cards, scores, and settings.\n(Tag rounds will NOT be affected.)"
@@ -715,7 +708,7 @@ export default function PuttingPage() {
       if (alreadySubmitted) return;
     }
 
-    const val = clampMade(made); // allows 0
+    const val = clampMade(made);
     await updatePuttingDot(
       `scores.${String(roundNum)}.${String(stationNum)}.${playerId}`,
       val
@@ -728,7 +721,7 @@ export default function PuttingPage() {
 
     for (let s = 1; s <= stations; s++) {
       for (const pid of ids) {
-        // 0 is valid. Missing = key doesn't exist.
+        // IMPORTANT: 0 counts as filled; only undefined/null is missing
         if (!rawMadeExists(roundNum, s, pid)) return false;
       }
     }
@@ -786,12 +779,11 @@ export default function PuttingPage() {
     ? submittedCountForRound(currentRound)
     : { submitted: 0, total: 0 };
 
-  const missingCardsThisRound = roundStarted
-    ? missingCardsForRound(currentRound)
-    : [];
+  const missingCardsThisRound = roundStarted ? missingCardsForRound(currentRound) : [];
 
   const showCardModeButtons = !roundStarted && !finalized && players.length >= 2;
-    // -------- Render --------
+
+  // -------- Render --------
   return (
     <div
       style={{
@@ -838,7 +830,7 @@ export default function PuttingPage() {
             ) : null}
           </div>
 
-          {/* Admin sees who hasn't submitted */}
+          {/* Admin status (who hasn't submitted) */}
           {roundStarted && (
             <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 14 }}>
               <div>
@@ -909,7 +901,10 @@ export default function PuttingPage() {
                       disabled={settings.locked || finalized}
                       onChange={(e) =>
                         updatePutting({
-                          settings: { ...settings, stations: Number(e.target.value) },
+                          settings: {
+                            ...settings,
+                            stations: Number(e.target.value),
+                          },
                         })
                       }
                       style={{ ...inputStyle, width: "100%", background: "#fff" }}
@@ -938,7 +933,10 @@ export default function PuttingPage() {
                       disabled={settings.locked || finalized}
                       onChange={(e) =>
                         updatePutting({
-                          settings: { ...settings, rounds: Number(e.target.value) },
+                          settings: {
+                            ...settings,
+                            rounds: Number(e.target.value),
+                          },
                         })
                       }
                       style={{ ...inputStyle, width: "100%", background: "#fff" }}
@@ -962,7 +960,7 @@ export default function PuttingPage() {
                         border: `1px solid ${COLORS.green}`,
                       }}
                       disabled={finalized}
-                      title="Locks stations/rounds and begins Round 1 (requires Round 1 cards first)"
+                      title="Requires admin password. Locks format and begins Round 1."
                     >
                       Begin Round 1 (Lock Format)
                     </button>
@@ -980,7 +978,7 @@ export default function PuttingPage() {
                         color: "white",
                         border: `1px solid ${COLORS.navy}`,
                       }}
-                      title="Only appears after every card submits for the current round"
+                      title="Requires admin password. Only appears after every card submits."
                     >
                       Begin Next Round (Auto Cards)
                     </button>
@@ -996,7 +994,7 @@ export default function PuttingPage() {
                         color: "white",
                         border: `1px solid ${COLORS.red}`,
                       }}
-                      title="Only appears after every card submits for the final round"
+                      title="No password required. Only available after all cards submit on final round."
                     >
                       Finalize Scores (Lock)
                     </button>
@@ -1010,8 +1008,9 @@ export default function PuttingPage() {
                       background: "#fff",
                       border: `1px solid ${COLORS.border}`,
                     }}
+                    title="No password required."
                   >
-                    Reset Putting League (Admin)
+                    Reset Putting League
                   </button>
                 </div>
               </div>
@@ -1106,7 +1105,13 @@ export default function PuttingPage() {
                           }}
                         >
                           <div style={{ fontWeight: 900, color: COLORS.text }}>{p.name}</div>
-                          <div style={{ fontSize: 12, fontWeight: 900, color: COLORS.navy }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 900,
+                              color: COLORS.navy,
+                            }}
+                          >
                             {p.pool === "B" ? "B Pool" : p.pool === "C" ? "C Pool" : "A Pool"}
                           </div>
                         </div>
@@ -1118,6 +1123,7 @@ export default function PuttingPage() {
                     </div>
                   )}
 
+                  {/* After check-in: choose manual vs random */}
                   {showCardModeButtons && (
                     <div
                       style={{
@@ -1180,6 +1186,7 @@ export default function PuttingPage() {
               )}
             </div>
           )}
+
           {/* CARDS */}
           <div
             style={{
@@ -1440,7 +1447,6 @@ export default function PuttingPage() {
                         )}
                       </div>
 
-                      {/* Stations accordion */}
                       <div style={{ display: "grid", gap: 10 }}>
                         {Array.from({ length: stations }, (_, i) => i + 1).map((stNum) => {
                           const open = !!openStations[stNum];
@@ -1569,7 +1575,6 @@ export default function PuttingPage() {
                         })}
                       </div>
 
-                      {/* Round totals summary (for this card) */}
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontWeight: 900, color: COLORS.navy, marginBottom: 8 }}>
                           Round {currentRound} Totals (This Card)
@@ -1613,7 +1618,6 @@ export default function PuttingPage() {
                         </div>
                       </div>
 
-                      {/* Submit */}
                       <div style={{ marginTop: 14 }}>
                         <button
                           onClick={() => submitCardScores(card.id)}
@@ -1625,7 +1629,7 @@ export default function PuttingPage() {
                             color: alreadySubmitted ? "#444" : "white",
                             border: `1px solid ${alreadySubmitted ? "#ddd" : COLORS.green}`,
                           }}
-                          title="Only works when every station has scores for every player"
+                          title="Only works when every station has a score for every player (0 is allowed)"
                         >
                           {alreadySubmitted ? "Card Submitted (Locked)" : "Submit Card Scores"}
                         </button>
@@ -1647,7 +1651,7 @@ export default function PuttingPage() {
                 })()
               ) : (
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                  Select your card to start scoring. You’ll only see your card.
+                  Select your card to start scoring.
                 </div>
               )}
             </div>
@@ -1734,14 +1738,22 @@ export default function PuttingPage() {
                                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                   <div
                                     style={{
+                                      width                                      style={{
                                       width: 34,
-                                      textAlign: "center",
+                                      height: 34,
+                                      borderRadius: 12,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
                                       fontWeight: 900,
-                                      color: COLORS.navy,
+                                      color: "white",
+                                      background: idx === 0 ? COLORS.green : COLORS.navy,
+                                      flexShrink: 0,
                                     }}
                                   >
                                     {idx + 1}
                                   </div>
+
                                   <div style={{ fontWeight: 900, color: COLORS.text }}>
                                     {r.name}
                                   </div>
@@ -1762,9 +1774,9 @@ export default function PuttingPage() {
             )}
           </div>
 
-          {/* Footer */}
-          <div style={{ marginTop: 14, textAlign: "center", fontSize: 12, color: "#666" }}>
-            Putting League • Version 1.4 • Developed by Eli Morgan
+          <div style={{ marginTop: 18, fontSize: 12, opacity: 0.65, textAlign: "center" }}>
+            Tip: Round 1 cards must be created before starting. After that, cards are auto-created
+            each round based on the previous round’s totals.
           </div>
         </div>
       </div>
