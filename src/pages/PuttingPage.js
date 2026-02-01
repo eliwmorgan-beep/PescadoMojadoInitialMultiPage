@@ -12,7 +12,7 @@ import {
 
 const LEAGUE_ID = "default-league";
 const ADMIN_PASSWORD = "Pescado!";
-const APP_VERSION = "v1.0.0";
+const APP_VERSION = "v1.5.1";
 
 function uid() {
   return Math.random().toString(36).substring(2, 10);
@@ -2003,11 +2003,6 @@ export default function PuttingPage() {
           </div>
 
           {/* ✅ Footer */}
-          <div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
-            {APP_VERSION 1.5} • Developed by Eli Morgan
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+<div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
+  {APP_VERSION} • Developed by Eli Morgan
+</div>
