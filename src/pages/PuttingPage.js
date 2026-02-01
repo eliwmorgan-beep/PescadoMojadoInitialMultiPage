@@ -1658,128 +1658,119 @@ export default function PuttingPage() {
           ) : null}
 
           {/* LEADERBOARDS (single toggle; all pools shown together) */}
-          <div style={{ textAlign: "left" }}>
+      <div style={{ textAlign: "left" }}>
+  <div
+    onClick={() => setLeaderboardsOpen((v) => !v)}
+    style={{
+      fontWeight: 900,
+      color: COLORS.navy,
+      marginBottom: 8,
+      cursor: "pointer",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 12px",
+      borderRadius: 14,
+      border: `1px solid ${COLORS.border}`,
+      background: "#fff",
+    }}
+  >
+    <span>Leaderboards (Cumulative)</span>
+    <span style={{ fontSize: 12, opacity: 0.75 }}>
+      {leaderboardsOpen ? "Tap to hide" : "Tap to show"}
+    </span>
+  </div>
+
+  {leaderboardsOpen && (
+    <div style={{ display: "grid", gap: 10 }}>
+      {["A", "B", "C"].map((k) => {
+        const label = k === "A" ? "A Pool" : k === "B" ? "B Pool" : "C Pool";
+        const rows = leaderboardByPool[k] || [];
+
+        return (
+          <div
+            key={k}
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 14,
+              background: "#fff",
+              overflow: "hidden",
+            }}
+          >
             <div
-              onClick={() => setLeaderboardsOpen((v) => !v)}
               style={{
-                fontWeight: 900,
-                color: COLORS.navy,
-                marginBottom: 8,
-                cursor: "pointer",
+                padding: "12px 12px",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: 10,
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: `1px solid ${COLORS.border}`,
-                background: "#fff",
+                background: COLORS.soft,
               }}
             >
-              <span>Leaderboards (Cumulative)</span>
-              <span style={{ fontSize: 12, opacity: 0.75 }}>
-                {leaderboardsOpen ? "Tap to hide" : "Tap to show"}
-              </span>
+              <div style={{ fontWeight: 900, color: COLORS.navy }}>
+                {label}{" "}
+                <span style={{ fontSize: 12, opacity: 0.75 }}>({rows.length})</span>
+              </div>
             </div>
 
-            {leaderboardsOpen && (
-              <div style={{ display: "grid", gap: 10 }}>
-                {["A", "B", "C"].map((k) => {
-                  const label = k === "A" ? "A Pool" : k === "B" ? "B Pool" : "C Pool";
-                  const rows = leaderboardByPool[k] || [];
-
-                  return (
+            <div style={{ padding: 12 }}>
+              {rows.length === 0 ? (
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  No players in this pool yet.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {rows.map((r, idx) => (
                     <div
-                      key={k}
+                      key={r.id}
                       style={{
+                        padding: "10px 12px",
+                        borderRadius: 12,
                         border: `1px solid ${COLORS.border}`,
-                        borderRadius: 14,
-                        background: "#fff",
-                        overflow: "hidden",
+                        background: COLORS.soft,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
                       }}
                     >
-                      <div
-                        style={{
-                          padding: "12px 12px",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                          background: COLORS.soft,
-                        }}
-                      >
-                        <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                          {label}{" "}
-                          <span style={{ fontSize: 12, opacity: 0.75 }}>({rows.length})</span>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 900,
+                            color: "white",
+                            background: idx === 0 ? COLORS.green : COLORS.navy,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {idx + 1}
                         </div>
+
+                        <div style={{ fontWeight: 900, color: COLORS.text }}>{r.name}</div>
                       </div>
 
-                      <div style={{ padding: 12 }}>
-                        {rows.length === 0 ? (
-                          <div style={{ fontSize: 12, opacity: 0.75 }}>
-                            No players in this pool yet.
-                          </div>
-                        ) : (
-                          <div style={{ display: "grid", gap: 8 }}>
-                            {rows.map((r, idx) => (
-                              <div
-                                key={r.id}
-                                style={{
-                                  padding: "10px 12px",
-                                  borderRadius: 12,
-                                  border: `1px solid ${COLORS.border}`,
-                                  background: COLORS.soft,
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  gap: 10,
-                                }}
-                              >
-                                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                  <div
-                                    style={{
-                                      width                                      style={{
-                                      width: 34,
-                                      height: 34,
-                                      borderRadius: 12,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      fontWeight: 900,
-                                      color: "white",
-                                      background: idx === 0 ? COLORS.green : COLORS.navy,
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    {idx + 1}
-                                  </div>
-
-                                  <div style={{ fontWeight: 900, color: COLORS.text }}>
-                                    {r.name}
-                                  </div>
-                                </div>
-
-                                <div style={{ fontWeight: 900, color: COLORS.navy }}>
-                                  {r.total} pts
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <div style={{ fontWeight: 900, color: COLORS.navy }}>{r.total} pts</div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-
-          <div style={{ marginTop: 18, fontSize: 12, opacity: 0.65, textAlign: "center" }}>
-            Tip: Round 1 cards must be created before starting. After that, cards are auto-created
-            each round based on the previous round’s totals.
-          </div>
-        </div>
-      </div>
+        );
+      })}
     </div>
-  );
-}
+  )}
+</div>
+
+<div style={{ marginTop: 18, fontSize: 12, opacity: 0.65, textAlign: "center" }}>
+  Tip: Round 1 cards must be created before starting. After that, cards are auto-created
+  each round based on the previous round’s totals.
+</div>
+</div>
