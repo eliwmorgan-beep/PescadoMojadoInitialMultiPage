@@ -12,7 +12,7 @@ import {
 
 const LEAGUE_ID = "default-league";
 const ADMIN_PASSWORD = "Pescado!";
-const APP_VERSION = "v1.5.1";
+const APP_VERSION = "v1.6.1";
 
 function uid() {
   return Math.random().toString(36).substring(2, 10);
@@ -95,8 +95,6 @@ function computeCardSizesNoOnes(n) {
     );
   }
 
-  // Nice presentation: sort cards sizes so 4s first, then 3s, then 2s (optional)
-  // But we keep original order to preserve randomness chunking.
   return result;
 }
 
@@ -177,6 +175,9 @@ export default function PuttingPage() {
   // Scorekeeper selection UI
   const [activeCardId, setActiveCardId] = useState("");
   const [openStations, setOpenStations] = useState({}); // {stationNum: bool}
+
+  // ✅ Admin unlock window (prevents password prompt on every leaderboard edit keystroke)
+  const [adminOkUntil, setAdminOkUntil] = useState(0);
 
   // -------- Helpers (computed) --------
   const settings = putting.settings || {};
@@ -260,12 +261,6 @@ export default function PuttingPage() {
     return total;
   }
 
-  function cumulativeTotalForPlayer(playerId) {
-    const base = cumulativeBaseTotalForPlayer(playerId);
-    const adj = Number(adjustments?.[playerId] ?? 0) || 0;
-    return base + adj;
-  }
-
   function submittedCountForRound(roundNum) {
     const cards = Array.isArray(cardsByRound[String(roundNum)])
       ? cardsByRound[String(roundNum)]
@@ -288,13 +283,17 @@ export default function PuttingPage() {
     return cards.filter((c) => !sub?.[c.id]);
   }
 
-  // Admin password gate
+  // ✅ Admin password gate (unlocks for 10 minutes)
   function requireAdmin(fn) {
+    const now = Date.now();
+    if (now < adminOkUntil) return fn();
+
     const pw = window.prompt("Admin password:");
     if (pw !== ADMIN_PASSWORD) {
       alert("Wrong password.");
       return;
     }
+    setAdminOkUntil(now + 10 * 60 * 1000);
     return fn();
   }
 
@@ -408,7 +407,7 @@ export default function PuttingPage() {
       if (ids.length > 4)
         return { ok: false, reason: "A card has more than 4 players." };
 
-      // ✅ Now allow 2,3,4 (only disallow 1)
+      // ✅ allow 2,3,4 (disallow 1)
       if (ids.length < 2) {
         return {
           ok: false,
@@ -428,7 +427,6 @@ export default function PuttingPage() {
       }
     }
 
-    // everyone assigned?
     if (seen.size !== allIds.size) {
       return {
         ok: false,
@@ -464,7 +462,6 @@ export default function PuttingPage() {
   }
 
   function buildAutoCardsFromRound(roundNum) {
-    // Sort by prior round total desc, then chunk by best sizes
     const ranked = [...players]
       .map((p) => ({
         id: p.id,
@@ -534,7 +531,6 @@ export default function PuttingPage() {
   async function randomizeRound1Cards() {
     if (finalized || roundStarted) return;
 
-    // ✅ require at least 2 players (since we refuse 1-player cards)
     if (players.length < 2) {
       alert("Check in at least 2 players first.");
       return;
@@ -549,7 +545,7 @@ export default function PuttingPage() {
       },
       submitted: {
         ...(putting.submitted || {}),
-        "1": {}, // clear submissions
+        "1": {},
       },
     });
     setSelectedForCard([]);
@@ -570,7 +566,6 @@ export default function PuttingPage() {
 
     const count = selectedForCard.length;
 
-    // ✅ Now allow 2–4
     if (count < 2) {
       alert("Select at least 2 players for a card.");
       return;
@@ -713,41 +708,44 @@ export default function PuttingPage() {
     alert("Scores finalized. Leaderboards are now locked.");
   }
 
+  // ✅ NOW REQUIRES ADMIN PASSWORD
   async function resetPuttingLeague() {
-    const ok = window.confirm(
-      "Reset PUTTING league only?\n\nThis clears putting players, cards, scores, settings, and leaderboard adjustments.\n(Tag rounds will NOT be affected.)"
-    );
-    if (!ok) return;
+    await requireAdmin(async () => {
+      const ok = window.confirm(
+        "Reset PUTTING league only?\n\nThis clears putting players, cards, scores, settings, and leaderboard adjustments.\n(Tag rounds will NOT be affected.)"
+      );
+      if (!ok) return;
 
-    await updateDoc(leagueRef, {
-      puttingLeague: {
-        settings: {
-          stations: 1, // ✅ default now 1
-          rounds: 1,
-          locked: false,
-          currentRound: 0,
-          finalized: false,
-          cardMode: "",
+      await updateDoc(leagueRef, {
+        puttingLeague: {
+          settings: {
+            stations: 1,
+            rounds: 1,
+            locked: false,
+            currentRound: 0,
+            finalized: false,
+            cardMode: "",
+          },
+          players: [],
+          cardsByRound: {},
+          scores: {},
+          submitted: {},
+          adjustments: {},
         },
-        players: [],
-        cardsByRound: {},
-        scores: {},
-        submitted: {},
-        adjustments: {}, // ✅ clear adjustments
-      },
-    });
+      });
 
-    setActiveCardId("");
-    setOpenStations({});
-    setSelectedForCard([]);
-    setCardName("");
-    setName("");
-    setPool("A");
-    setSetupOpen(true);
-    setCheckinOpen(true);
-    setCardsOpen(true);
-    setLeaderboardsOpen(false);
-    setAdjustOpen(false);
+      setActiveCardId("");
+      setOpenStations({});
+      setSelectedForCard([]);
+      setCardName("");
+      setName("");
+      setPool("A");
+      setSetupOpen(true);
+      setCheckinOpen(true);
+      setCardsOpen(true);
+      setLeaderboardsOpen(false);
+      setAdjustOpen(false);
+    });
   }
 
   // -------- Admin leaderboard adjustment tool --------
@@ -761,18 +759,18 @@ export default function PuttingPage() {
     });
   }
 
+  // ✅ NOW REQUIRES ADMIN PASSWORD (but won’t reprompt if already unlocked)
   async function setFinalLeaderboardTotal(playerId, desiredFinalTotal) {
     if (finalized) return;
 
-    const base = cumulativeBaseTotalForPlayer(playerId);
-    const desired = Number(desiredFinalTotal);
+    await requireAdmin(async () => {
+      const base = cumulativeBaseTotalForPlayer(playerId);
+      const desired = Number(desiredFinalTotal);
+      if (Number.isNaN(desired)) return;
 
-    if (Number.isNaN(desired)) return;
-
-    const adj = desired - base;
-
-    // Store adjustment as an integer (or keep as number)
-    await updatePuttingDot(`adjustments.${playerId}`, adj);
+      const adj = desired - base;
+      await updatePuttingDot(`adjustments.${playerId}`, adj);
+    });
   }
 
   async function clearAdjustment(playerId) {
@@ -811,7 +809,6 @@ export default function PuttingPage() {
       stationNum
     )}.${playerId}`;
 
-    // Blank means "not recorded yet"
     if (made === "" || made === null || made === undefined) {
       await updateDoc(leagueRef, { [path]: deleteField() });
       return;
@@ -1108,7 +1105,7 @@ export default function PuttingPage() {
                     </button>
                   )}
 
-                  {/* ✅ Leaderboard Adjust Tool */}
+                  {/* Leaderboard Adjust Tool (ADMIN REQUIRED) */}
                   <button
                     onClick={openAdjustmentsEditor}
                     style={{
@@ -1188,6 +1185,7 @@ export default function PuttingPage() {
                                     background: "#fff",
                                     fontWeight: 900,
                                   }}
+                                  title="Requires admin password"
                                 />
                                 <button
                                   onClick={() => clearAdjustment(p.id)}
@@ -1209,6 +1207,7 @@ export default function PuttingPage() {
                     </div>
                   )}
 
+                  {/* ✅ Reset Putting League (ADMIN REQUIRED) */}
                   <button
                     onClick={resetPuttingLeague}
                     style={{
@@ -1217,7 +1216,7 @@ export default function PuttingPage() {
                       background: "#fff",
                       border: `1px solid ${COLORS.border}`,
                     }}
-                    title="No password required."
+                    title="Requires admin password."
                   >
                     Reset Putting League
                   </button>
@@ -1332,7 +1331,6 @@ export default function PuttingPage() {
                     </div>
                   )}
 
-                  {/* After check-in: choose manual vs random */}
                   {showCardModeButtons && (
                     <div
                       style={{
@@ -1976,7 +1974,8 @@ export default function PuttingPage() {
                                     {r.name}
                                     {r.adj ? (
                                       <span style={{ fontSize: 12, marginLeft: 8, opacity: 0.75 }}>
-                                        (adj {r.adj > 0 ? "+" : ""}{r.adj})
+                                        (adj {r.adj > 0 ? "+" : ""}
+                                        {r.adj})
                                       </span>
                                     ) : null}
                                   </div>
@@ -2002,7 +2001,7 @@ export default function PuttingPage() {
             each round based on the previous round’s totals.
           </div>
 
-                    {/* ✅ Footer */}
+          {/* Footer */}
           <div style={{ marginTop: 14, fontSize: 12, opacity: 0.55, textAlign: "center" }}>
             {APP_VERSION} • Developed by Eli Morgan
           </div>
